@@ -1,0 +1,10 @@
+*
+!readme.md
+!.gitignore
+!package.json
+#code
+!fdroid.js
+!makefile
+#build tools
+!build-tools-34.0.0
+!build-tools-34.0.0/**
