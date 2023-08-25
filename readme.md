@@ -1,6 +1,10 @@
 # [F-Droid](https://f-droid.org) repo
 
-Unoffical package to setup a fdroid repository quite quickly
+Unoffical [package](https://www.npmjs.com/package/fdroid-repo) to setup a fdroid repository quite quickly
+
+```sh
+npm i fdroid-repo
+```
 
 ## Notes
 
@@ -9,7 +13,8 @@ You should have [`keytool`](https://stackoverflow.com/questions/4830253/where-is
 You can link people to `market://details?id=com.organizastion.package` (which can send people to *AN* appstore).
 You can also link people to your repo so they can easily add it `fdroidrepo://example.com` (`https://` is by default).
 
-build tools are included in the package, you can check the makefile to see
+build tools are included in the package, you can check the makefile to see how its downloaded and how you can get
+the tools yourself.
 
 ## Example
 
