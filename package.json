@@ -1,6 +1,6 @@
 {
   "name": "fdroid-repo",
-  "version": "1.0.0",
+  "version": "1.0.0-1",
   "description": "Unoffical package to setup a fdroid repository quite quickly",
   "main": "fdroid.js",
   "scripts": {
@@ -16,8 +16,7 @@
   "author": "Clearedd",
   "license": "MIT",
   "dependencies": {
-    "archiver": "^5.3.1",
-    "xml-js": "^1.6.11"
+    "archiver": "^5.3.1"
   },
   "repository": {
     "type": "git",

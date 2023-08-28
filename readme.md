@@ -8,7 +8,10 @@ npm i fdroid-repo
 
 ## Notes
 
-You should have [`keytool`](https://stackoverflow.com/questions/4830253/where-is-the-keytool-application)
+You should have `keytool`
+```sh
+pacman -S jdk-openjdk
+```
 
 You can link people to `market://details?id=com.organizastion.package` (which can send people to *AN* appstore).
 You can also link people to your repo so they can easily add it `fdroidrepo://example.com` (`https://` is by default).
@@ -112,7 +115,6 @@ const config = {
     await pack.addVersion(
         `./app.apk`,
         `app.apk`,
-        //fs.readFileSync(`./androidManifest.xml`), // able to read from apk, wowe
     );
     repo.addPackage(pack);
 

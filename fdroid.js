@@ -1,7 +1,6 @@
 const fs = require(`fs-extra`);
 const child = require(`child_process`);
 var crypto = require('crypto');
-var convert = require('xml-js');
 const archiver = require("archiver");
 
 function sha256(input) {
@@ -14,6 +13,7 @@ function sha256(input) {
 
 function spawn(cmd, args, options) {
     var log = ``;
+    //console.log(cmd,args);
     return new Promise(r => child.spawn(cmd, args, options)
         .on(`close`, () => { r(log) })
         .on(`exit`, (status, signal) => { if (status) console.log(`Command failed with ${status} ${cmd}`) })
@@ -38,10 +38,13 @@ async function fileForFdroid(file, url) {
     });
     //if (module.exports.app)
     //    module.exports.app.get(`/${url}`, express.static(path.join(process.cwd(), file)));
+    //if (module.exports.ipfs)
+    //    var CID = await module.exports.ipfs.add(fs.readFileSync(file).toString());
     return {
         "name": `/${url}`, // thees HAVE TO start with /
         "sha256": hash,
-        "size": fs.statSync(file).size
+        "size": fs.statSync(file).size,
+        //"ipfsCIDv1": CID ? JSON.parse(JSON.stringify(CID, null, 4))["/"] : undefined,
     };
 }
 
@@ -52,38 +55,39 @@ async function filesForFdroid(localizastions = { "en-US": { file: "", url: "" } 
     return localizastions;
 }
 
-function readManifest(manifest) {
-    if (!manifest) return console.log(`Missing manifest input`);
-    var result1 = convert.xml2js(manifest);
-    var m = result1.elements[0]; // manifest
-    var sdk = m.elements.find(x => x.name == `uses-sdk`).attributes;
-    var perms = m.elements.find(x => x.name == `uses-permission`).attributes;
-    var features = m.elements.find(x => x.name == `uses-feature`).attributes;
-    var application = m.elements.find(x => x.name == `application`).attributes;
-    if (application[`android:testOnly`] == `true` || application[`android:debuggable`] == `true`) return console.log(`Not publishing testOnly/debuggable version.`); // testOnly cant be installed (without adb) anyway.
-    return {
-        "versionCode": parseInt(m.attributes['android:versionCode']),
-        "versionName": m.attributes['android:versionName'],
-        "package": m.attributes.package,
-        "uses-sdk": {
-            "minSdkVersion": parseInt(sdk[`android:minSdkVersion`]),
-            "targetSdkVersion": parseInt(sdk[`android:targetSdkVersion`])
-        },
-        "uses-permission": Object.keys(perms).flatMap(x => {
-            let p = {};
-            p[x.replace(`android:`, ``)] = perms[x];
-            // "maxSdkVersion": 30
-            return p;
-        }),
-        // not needed for f-droid but for me :)
-        "name": application[`android:label`],
-        "description": application[`android:description`],
-    };
-}
+//function readManifest(manifest) {
+//    var convert = require('xml-js');
+//    if (!manifest) return console.log(`Missing manifest input`);
+//    var result1 = convert.xml2js(manifest);
+//    var m = result1.elements[0]; // manifest
+//    var sdk = m.elements.find(x => x.name == `uses-sdk`).attributes;
+//    var perms = m.elements.find(x => x.name == `uses-permission`).attributes;
+//    var features = m.elements.find(x => x.name == `uses-feature`).attributes;
+//    var application = m.elements.find(x => x.name == `application`).attributes;
+//    if (application[`android:testOnly`] == `true` || application[`android:debuggable`] == `true`) return console.log(`Not publishing testOnly/debuggable version.`); // testOnly cant be installed (without adb) anyway.
+//    return {
+//        "versionCode": parseInt(m.attributes['android:versionCode']),
+//        "versionName": m.attributes['android:versionName'],
+//        "package": m.attributes.package,
+//        "uses-sdk": {
+//            "minSdkVersion": parseInt(sdk[`android:minSdkVersion`]),
+//            "targetSdkVersion": parseInt(sdk[`android:targetSdkVersion`])
+//        },
+//        "uses-permission": Object.keys(perms).flatMap(x => {
+//            let p = {};
+//            p[x.replace(`android:`, ``)] = perms[x];
+//            // "maxSdkVersion": 30
+//            return p;
+//        }),
+//        // not needed for f-droid but for me :)
+//        "name": application[`android:label`],
+//        "description": application[`android:description`],
+//    };
+//}
 
 // So scuffed.
 function readManifestApk(apk) {
-    if(!fs.existsSync(apk)) return console.log(`apk dosent exist: ${apk}`);
+    if (!fs.existsSync(apk)) return console.log(`apk dosent exist: ${apk}`);
     let raw = child.spawnSync(`${module.exports.buildtools}/aapt2`, [`dump`, `badging`, apk]).output.toString();
     var j = {};
     raw.split(`\n`).forEach(x => {
@@ -211,16 +215,15 @@ module.exports.package = class {
      * 
      * @param {String} file 
      * @param {String} fileURL
-     * @param {String} manifest if it isnt defined it'll try to read it from the apk
      * @param {Boolean} beta beta is actually defined by a packages "suggestedVersionCode" in the metadata.
      * @param {Array} signer sha256 signers
      * @param {String} src 
      * @param {*} antiFeatures https://f-droid.org/en/docs/Build_Metadata_Reference/#build_antifeatures
      */
-    async addVersion(file, fileURL, manifest, beta = false, signer = [], src = { file: ``, url: `` }, antiFeatures = {}) {
-        let m = manifest ? readManifest(manifest) : readManifestApk(file);
+    async addVersion(file, fileURL, beta = false, signer = [], src = { file: ``, url: `` }, antiFeatures = {}) {
+        let m = readManifestApk(file);
         //console.log(m);
-        if (!m) return;
+        if (!m) return console.log(`failed to read manifest`);
         this.versions.push({
             "added": fs.statSync(file).mtime.getTime(),
             "file": await fileForFdroid(file, fileURL),
@@ -419,6 +422,8 @@ module.exports.repo = class {
                     { env: {} }
                 );
             // sign ("attributes not matching" (in client error) means not signed)
+            if (!fs.existsSync(keystore)) return console.error(`keystore dosent exist ${keystore}`);
+            if (!fs.existsSync(entry)) return console.error(`entry.jar dosent exist ${entry}`);
             await spawn(
                 `${module.exports.buildtools}/apksigner`,
                 [
