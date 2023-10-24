@@ -13,13 +13,12 @@ function sha256(input) {
 
 function spawn(cmd, args, options) {
     var log = ``;
-    //console.log(cmd,args);
+    //console.log(cmd, args);
     return new Promise(r => child.spawn(cmd, args, options)
         .on(`close`, () => { r(log) })
         .on(`exit`, (status, signal) => { if (status) console.log(`Command failed with ${status} ${cmd}`) })
         .on(`error`, console.log)
-        .on(`message`, (m) => log += m)
-        //.stdout.pipe(process.stdout)
+        .stdout.on(`data`, c => log += c)
     )
 }
 
@@ -136,7 +135,8 @@ function readManifestApk(apk) {
     //console.log(raw);
     //console.log(`=================`);
     //console.log(j);
-    if (j.testOnly) return console.log(`Not publishing testOnly/debuggable version.`);
+    if (j.testOnly) throw new Error(`Not publishing testOnly/debuggable version.`);
+    if (!j.package) throw new Error(`Invalid apk badge\n`, j);
     return {
         "versionCode": j.package.versionCode,
         "versionName": j.package.versionName,
@@ -215,15 +215,16 @@ module.exports.package = class {
      * 
      * @param {String} file 
      * @param {String} fileURL
-     * @param {Boolean} beta beta is actually defined by a packages "suggestedVersionCode" in the metadata.
      * @param {Array} signer sha256 signers
      * @param {String} src 
-     * @param {*} antiFeatures https://f-droid.org/en/docs/Build_Metadata_Reference/#build_antifeatures
+     * @param {Object} antiFeatures https://f-droid.org/en/docs/Build_Metadata_Reference/#build_antifeatures
+     * @param {Object} whatsNew changelog for that version, localized e.g {"en-US":"localizastion upadte! Yipee!"}
+     * @param {Array} releaseChannels array of some channels? This can be left empty e.g ["Beta"]
      */
-    async addVersion(file, fileURL, beta = false, signer = [], src = { file: ``, url: `` }, antiFeatures = {}) {
+    async addVersion(file, fileURL,/* beta = false,*/ signer = [], src = { file: ``, url: `` }, antiFeatures = {}, whatsNew = {}, releaseChannels = []) {
         let m = readManifestApk(file);
         //console.log(m);
-        if (!m) return console.log(`failed to read manifest`);
+        if (!m) throw new Error(`failed to read manifest`);
         this.versions.push({
             "added": fs.statSync(file).mtime.getTime(),
             "file": await fileForFdroid(file, fileURL),
@@ -233,7 +234,9 @@ module.exports.package = class {
                 "sha256": signer
             },
             "src": src.file && src.url ? await fileForFdroid(src.file, src.url) : undefined,
-            "beta": beta
+            "whatsNew": whatsNew,
+            "releaseChannels": releaseChannels,
+            //"beta": beta
         });
     }
     out() {
@@ -243,11 +246,12 @@ module.exports.package = class {
         if (!this.meta.name && mN.name) this.meta.name = { "en-US": mN.name };
         if (!this.meta.description && mN.description) this.meta.name = { "en-US": mN.description };
         this.meta.lastUpdated = this.versions[0].added;
-        for (var i = 0; i < this.versions.length; i++)
-            if (!mN.beta) {
-                this.meta.suggestedVersionCode = mN.versionCode;
-                break;
-            }
+        // set suggestedVersionCode aka. beta versions are above it
+        //for (var i = 0; i < this.versions.length; i++)
+        //    if (!mN.beta) {
+        //        this.meta.suggestedVersionCode = mN.versionCode;
+        //        break;
+        //    }
         // do versions
         var versions = {};
         this.versions.forEach(y => {
@@ -369,49 +373,67 @@ module.exports.repo = class {
      * @returns 
      */
     async genEntry(keystore, alias, storepass, keypass, entry = `./entry.jar`) {
-        if (!this.index) return console.error(`You godda generate the index for the repo first (genIndex)`);
-        var json = {
-            timestamp: new Date().getTime(),
-            version: 30001,
-            maxAge: 14,
-            index: {
-                name: "/index-v2.json",
-                sha256: sha256(this.index),
-                size: this.index.length,
-                numPackages: Object.keys(this.packages).length,
-            },
-            diffs: {},
-        };
-        const archive = archiver("zip", {
-            zlib: { level: 9 }, // Sets the compression level.
-        });
-        const jarout = fs.createWriteStream(entry);
-        archive.pipe(jarout);
-        archive.on('error', function (err) {
-            throw err;
-        });
-        archive.on('warning', function (err) {
-            console.log(err);
-            if (err.code === 'ENOENT') {
-                // log warning
-            } else {
+        return new Promise(r => {
+            if (!this.index) return console.error(`You godda generate the index for the repo first (genIndex)`);
+            var json = {
+                timestamp: new Date().getTime(),
+                version: 30001,
+                maxAge: 14,
+                index: {
+                    name: "/index-v2.json",
+                    sha256: sha256(this.index),
+                    size: this.index.length,
+                    numPackages: Object.keys(this.packages).length,
+                },
+                diffs: {},
+            };
+            const archive = archiver("zip", {
+                zlib: { level: 9 }, // Sets the compression level.
+            });
+            const jarout = fs.createWriteStream(entry);
+            archive.pipe(jarout);
+            archive.on('error', function (err) {
                 throw err;
-            }
-        });
-        jarout.on(`close`, async () => {
-            // generate key
-            if (!fs.existsSync(keystore))
-                await spawn(
+            });
+            archive.on('warning', function (err) {
+                console.log(err);
+                if (err.code === 'ENOENT') {
+                    // log warning
+                } else {
+                    throw err;
+                }
+            });
+            jarout.on(`close`, async () => {
+                // generate keystore
+                if (!fs.existsSync(keystore))
+                    await spawn(
+                        `keytool`,
+                        [
+                            `-genkey`,
+                            `-keyalg`,
+                            `RSA`,
+                            `-noprompt`,
+                            `-alias`,
+                            alias,
+                            `-dname`,
+                            this.str_sign(),
+                            `-keystore`,
+                            keystore,
+                            `-storepass`,
+                            storepass,
+                            `-keypass`,
+                            keypass,
+                        ],
+                        { env: {} }
+                    );
+                // generate the public key
+                var pubKey = await spawn(
                     `keytool`,
                     [
-                        `-genkey`,
-                        `-keyalg`,
-                        `RSA`,
-                        `-noprompt`,
+                        `-list`,
+                        `-v`,
                         `-alias`,
                         alias,
-                        `-dname`,
-                        this.str_sign(),
                         `-keystore`,
                         keystore,
                         `-storepass`,
@@ -421,45 +443,68 @@ module.exports.repo = class {
                     ],
                     { env: {} }
                 );
-            // sign ("attributes not matching" (in client error) means not signed)
-            if (!fs.existsSync(keystore)) return console.error(`keystore dosent exist ${keystore}`);
-            if (!fs.existsSync(entry)) return console.error(`entry.jar dosent exist ${entry}`);
-            await spawn(
-                `${module.exports.buildtools}/apksigner`,
-                [
-                    `sign`,
-                    `--min-sdk-version`,
-                    `23`,
-                    `--max-sdk-version`,
-                    `24`,
-                    `--v1-signing-enabled`,
-                    `true`,
-                    `--v2-signing-enabled`,
-                    `false`,
-                    `--v3-signing-enabled`,
-                    `false`,
-                    `--v4-signing-enabled`,
-                    `false`,
-                    `--ks`,
-                    keystore,
-                    `--ks-pass`,
-                    `env:FDROID_KEY_STORE_PASS`,
-                    `--ks-key-alias`,
-                    alias,
-                    `--key-pass`,
-                    `env:FDROID_KEY_PASS`,
-                    entry,
-                ],
-                {
-                    env: {
-                        'FDROID_KEY_STORE_PASS': storepass,
-                        'FDROID_KEY_PASS': keypass
-                    }
-                }
-            );
+                this.fingerprint = pubKey.split(`\n`).find(x => x.trimStart().startsWith(`SHA256`)).trimStart().replace(`SHA256: `,``).replace(/:/g,``).toLowerCase();
+                /*var pubKey = await spawn(
+                    `keytool`,
+                    [
+                        `-exportcert`,
+                        `-alias`,
+                        alias,
+                        `-keystore`,
+                        keystore,
+                        `-storepass`,
+                        storepass,
+                        `-keypass`,
+                        keypass,
+                    ],
+                    { env: {} }
+                );
 
+                const digest = crypto.createHash('sha256').update(pubKey).digest();
+                this.fingerprint = Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('');
+                */
+                // sign ("attributes not matching" (in client error) means not signed)
+                if (!fs.existsSync(keystore)) return console.error(`keystore dosent exist ${keystore}`);
+                if (!fs.existsSync(entry)) return console.error(`entry.jar dosent exist ${entry}`);
+                // sign the entry.jar
+                await spawn(
+                    `${module.exports.buildtools}/apksigner`,
+                    [
+                        `sign`,
+                        `--min-sdk-version`,
+                        `23`,
+                        `--max-sdk-version`,
+                        `24`,
+                        `--v1-signing-enabled`,
+                        `true`,
+                        `--v2-signing-enabled`,
+                        `false`,
+                        `--v3-signing-enabled`,
+                        `false`,
+                        `--v4-signing-enabled`,
+                        `false`,
+                        `--ks`,
+                        keystore,
+                        `--ks-pass`,
+                        `env:FDROID_KEY_STORE_PASS`,
+                        `--ks-key-alias`,
+                        alias,
+                        `--key-pass`,
+                        `env:FDROID_KEY_PASS`,
+                        entry,
+                    ],
+                    {
+                        env: {
+                            'FDROID_KEY_STORE_PASS': storepass,
+                            'FDROID_KEY_PASS': keypass
+                        }
+                    }
+                );
+
+                r();
+            });
+            archive.append(JSON.stringify(json), { name: "entry.json" });
+            archive.finalize();
         });
-        archive.append(JSON.stringify(json), { name: "entry.json" });
-        archive.finalize();
     }
 }

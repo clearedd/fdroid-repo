@@ -1,6 +1,6 @@
 # [F-Droid](https://f-droid.org) repo
 
-Unoffical [package](https://www.npmjs.com/package/fdroid-repo) to setup a fdroid repository quite quickly
+Unoffical [package](https://www.npmjs.com/package/fdroid-repo) to setup an fdroid repository quite quickly
 
 ```sh
 npm i fdroid-repo
@@ -8,13 +8,16 @@ npm i fdroid-repo
 
 ## Notes
 
-You should have `keytool`
-```sh
-pacman -S jdk-openjdk
-```
+You should have `keytool` which is available in java ([jdk-openjdk](https://archlinux.org/packages/extra/x86_64/jdk-openjdk/))
 
 You can link people to `market://details?id=com.organizastion.package` (which can send people to *AN* appstore).
 You can also link people to your repo so they can easily add it `fdroidrepo://example.com` (`https://` is by default).
+
+It is also recomended that you add the fingerprint of your key e.g
+`fdroidrepo://example.com?fingerprint=bruh`
+which you can get of course. (see example)
+
+I can't be bothered to make index-v1
 
 build tools are included in the package, you can check the makefile to see how its downloaded and how you can get
 the tools yourself.
@@ -62,7 +65,7 @@ const config = {
     var app = express();
 
     if (config.secure) {
-        if (!fs.existsSync(`./${config.website}.key`) || !fs.existsSync(`./${config.website}.pem`)) return quit(`Missing https key/pem files`);
+        if (!fs.existsSync(`./${config.website}.key`) || !fs.existsSync(`./${config.website}.pem`)) throw new Error(`Missing https key/pem files`);
         var server = https.createServer({
             key: fs.readFileSync(`./${config.website}.key`),
             cert: fs.readFileSync(`./${config.website}.pem`),
@@ -93,7 +96,7 @@ const config = {
         description: {
             "en-US": "hello world"
         }
-        // there are more ofc
+        // see script below
     });
 
     var pack = new fd.package({
@@ -132,7 +135,24 @@ const config = {
         res.setHeader(`Content-Type`, `application/json`);
         res.send(repo.index);
     });
+
+    // you can then get a qr code to add the repo easily
+    const repoLink = config.secure ? `fdroidrepo://${config.website}` : `http://${getIP()}:${server.address().port}`;
+    console.log(repoLink);
+    require('qrcode').toString(`${repoLink}?fingerprint=${repo.fingerprint}`, { type: 'terminal' }, function (err, url) {
+        console.log(url)
+    })
 })();
+```
+
+script to check variables in fdroid repo (since there is no documentation for them)
+```sh
+curl -o i.json https://f-droid.org/repo/index-v2.json # fdroid.org redirects to f-droid
+```
+```js
+require(`fs`).writeFileSync(`./ver.json`,JSON.stringify(require(`./i.json`).packages[`org.fdroid.basic`].versions,null,4))
+require(`fs`).writeFileSync(`./meta.json`,JSON.stringify(require(`./i.json`).packages[`org.fdroid.basic`].metadata,null,4))
+require(`fs`).writeFileSync(`./repo.json`,JSON.stringify(require(`./i.json`).repo,null,4))
 ```
 
 ## updating build tools
@@ -142,11 +162,6 @@ make install # installs the sdkmanager and buildtools
 make list # lists packages from sdkmanger (you would use this to find the newest version of build tools)
 # ./android/build-tools/34.0.0/
 ```
-
-## Send version and UUID to servers (in fdroid settings)
-
-adds `client_version` (also in headers by default) & `id` in paramaters.
-Wow that is useless.
 
 ## Links
 
