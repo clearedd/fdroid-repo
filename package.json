@@ -1,7 +1,7 @@
 {
   "name": "fdroid-repo",
-  "version": "1.0.0-1",
-  "description": "Unoffical package to setup a fdroid repository quite quickly",
+  "version": "1.0.1-1",
+  "description": "Unoffical package to setup an fdroid repository quite quickly",
   "main": "fdroid.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

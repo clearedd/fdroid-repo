@@ -2,11 +2,10 @@ sdkmanager := ./android/tools/bin/sdkmanager
 androidVersion:=28# sdk/api https://apilevels.com / https://developer.android.com/ndk/guides/sdk-versions
 ndkVer := 25.2.9519653
 buildToolVer := 34.0.0-rc3
-androidPackage := org.fdroid.fdroid
 
 log:
 	@echo -e '\033[0;36m############### Logs ###############\033[0m'
-	adb logcat -v color -v brief --pid=$(shell adb shell ps | grep $(androidPackage) | grep -oE '[0-9]+' | sed -n '3p')
+	adb logcat -v color -v brief --pid=$(shell adb shell ps | grep org.fdroid.fdroid | grep -oE '[0-9]+' | sed -n '3p')
 
 install:
 	@if [ ! -e "./android" ]; then \

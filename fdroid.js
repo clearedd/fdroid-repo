@@ -141,7 +141,7 @@ function readManifestApk(apk) {
         "versionCode": j.package.versionCode,
         "versionName": j.package.versionName,
         "package": j.package.name,
-        "uses-sdk": {
+        "usesSdk": {
             "minSdkVersion": j.sdkVersion,
             "targetSdkVersion": j.targetSdkVersion
         },
@@ -172,7 +172,7 @@ module.exports.package = class {
             "",
         ],
         "changelog": "", // link
-        "suggestedVersionCode": 0,
+        //"suggestedVersionCode": 0,
         "donate": [
             "",
         ],
@@ -195,7 +195,7 @@ module.exports.package = class {
                 ]
             }
         },
-        "preferredSigner": "",
+        //"preferredSigner": "",
     }) {
         if (meta.icon) filesForFdroid(meta.icon);
         if (meta.featureGraphic) filesForFdroid(meta.featureGraphic);
@@ -225,14 +225,15 @@ module.exports.package = class {
         let m = readManifestApk(file);
         //console.log(m);
         if (!m) throw new Error(`failed to read manifest`);
+        if (!m.signer && signer.length)
+            m.signer = {
+                "sha256": signer
+            };
         this.versions.push({
             "added": fs.statSync(file).mtime.getTime(),
             "file": await fileForFdroid(file, fileURL),
             "manifest": m,
             "antiFeatures": antiFeatures,
-            "signer": {
-                "sha256": signer
-            },
             "src": src.file && src.url ? await fileForFdroid(src.file, src.url) : undefined,
             "whatsNew": whatsNew,
             "releaseChannels": releaseChannels,
@@ -443,7 +444,7 @@ module.exports.repo = class {
                     ],
                     { env: {} }
                 );
-                this.fingerprint = pubKey.split(`\n`).find(x => x.trimStart().startsWith(`SHA256`)).trimStart().replace(`SHA256: `,``).replace(/:/g,``).toLowerCase();
+                this.fingerprint = pubKey.split(`\n`).find(x => x.trimStart().startsWith(`SHA256`)).trimStart().replace(`SHA256: `, ``).replace(/:/g, ``).toLowerCase();
                 /*var pubKey = await spawn(
                     `keytool`,
                     [
