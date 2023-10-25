@@ -1,6 +1,6 @@
 # [F-Droid](https://f-droid.org) repo
 
-Unoffical [package](https://www.npmjs.com/package/fdroid-repo) to setup an fdroid repository quite quickly
+Unofficial [package](https://www.npmjs.com/package/fdroid-repo) to setup an fdroid repository quite quickly
 
 ```sh
 npm i fdroid-repo
@@ -128,7 +128,8 @@ const config = {
 
     // routing
 
-    app.use(`/app.apk`, express.static(path.join(__dirname, `./app.apk`)));
+    // * since it can be requested from / or /repo/ or /fdroid/repo
+    app.use(`*/app.apk`, express.static(path.join(__dirname, `./app.apk`)));
     app.get("*/entry.jar", express.static(path.join(__dirname, `entrier.jar`)));
 
     app.get("*/index-v2.json", (req, res, next) => {
