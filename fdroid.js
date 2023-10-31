@@ -59,20 +59,20 @@ async function filesForFdroid(localizastions = { "en-US": { file: "", url: "" } 
 //    if (!manifest) return console.log(`Missing manifest input`);
 //    var result1 = convert.xml2js(manifest);
 //    var m = result1.elements[0]; // manifest
-//    var sdk = m.elements.find(x => x.name == `uses-sdk`).attributes;
-//    var perms = m.elements.find(x => x.name == `uses-permission`).attributes;
-//    var features = m.elements.find(x => x.name == `uses-feature`).attributes;
+//    var sdk = m.elements.find(x => x.name == `usesSdk`).attributes;
+//    var perms = m.elements.find(x => x.name == `usesPermission`).attributes;
+//    var features = m.elements.find(x => x.name == `usesFeature`).attributes;
 //    var application = m.elements.find(x => x.name == `application`).attributes;
 //    if (application[`android:testOnly`] == `true` || application[`android:debuggable`] == `true`) return console.log(`Not publishing testOnly/debuggable version.`); // testOnly cant be installed (without adb) anyway.
 //    return {
 //        "versionCode": parseInt(m.attributes['android:versionCode']),
 //        "versionName": m.attributes['android:versionName'],
 //        "package": m.attributes.package,
-//        "uses-sdk": {
+//        "usesSdk": {
 //            "minSdkVersion": parseInt(sdk[`android:minSdkVersion`]),
 //            "targetSdkVersion": parseInt(sdk[`android:targetSdkVersion`])
 //        },
-//        "uses-permission": Object.keys(perms).flatMap(x => {
+//        "usesPermission": Object.keys(perms).flatMap(x => {
 //            let p = {};
 //            p[x.replace(`android:`, ``)] = perms[x];
 //            // "maxSdkVersion": 30
@@ -84,50 +84,74 @@ async function filesForFdroid(localizastions = { "en-US": { file: "", url: "" } 
 //    };
 //}
 
-// So scuffed.
-function readManifestApk(apk) {
+function readApkManifest(apk) {
     if (!fs.existsSync(apk)) return console.log(`apk dosent exist: ${apk}`);
     let raw = child.spawnSync(`${module.exports.buildtools}/aapt2`, [`dump`, `badging`, apk]).output.toString();
     var j = {};
     raw.split(`\n`).forEach(x => {
         let kv = x.split(`:`);
         //console.log(kv);
-        if (kv[0].split(`=`)[1]) return j[kv[0].split(`=`)[0]] = kv[0].split(`=`)[1].replace(/'/g, ``);
+        // give up if there is "no value" but return it without quotes
+        let kvSplit = kv[0].split(`=`);
+        if (kvSplit[1]) return j[kvSplit[0]] = kvSplit[1].replace(/'/g, ``);
+        // remove non alphabet characters from key
         kv[0] = kv[0].replace(/[^A-Za-z]+/g, '');
         if (!kv[1]) return;
+        if (j[kv[0]]) {
+            // there are multiple keys with diffrent values (e.g permissions), make into array
+            if (!Array.isArray(j[kv[0]]))
+                j[kv[0]] = [j[kv[0]]];
+        }
+        // value dosen't includes sub values?
         if (!kv[1].includes(`=`)) {
             kv[1] = kv[1].replace(/'/g, ``);
             if (kv[1] && !isNaN(kv[1])) kv[1] = parseInt(kv[1]);
             else kv[1] = String(kv[1]).trimStart();
             j[kv[0]] = kv[1];
-        } else {
-            j[kv[0]] = {};
-            let s = 0;
-            let str = ``;
-            let key = ``;
-            for (var i = 0; i < kv[1].length; i++) {
-                let c = kv[1][i];
-                switch (s) {
-                    case 0:
-                        if (c == `=`) {
-                            s = 1;
-                            key = str.replace(/[^A-Za-z]+/g, '');
-                            str = ``;
-                            i++;
-                        } else
-                            str += c;
+            return;
+        }
+        let s = 0; // search value
+        let str = ``;
+        let key = ``;
+        kv[1] = kv[1].trimStart();
+        for (var i = 0; i < kv[1].length; i++) {
+            let c = kv[1][i];
+            switch (s) {
+                // search for =
+                case 0:
+                    if (c != `=`) {
+                        str += c;
                         break;
-                    case 1:
-                        if (c == `'`) {
-                            if (str && !isNaN(str)) str = parseInt(str);
-                            j[kv[0]][key] = str;
-                            str = ``;
-                            key = ``;
-                            s = 0;
-                        } else
-                            str += c;
+                    }
+                    s = 1;
+                    // everything before the = mark is the key
+                    key = str.replace(/[^A-Za-z]+/g, '');
+                    str = ``;
+                    i++; // there is no space between the = and ' so just skip over the first '
+                    break;
+                // search for '
+                case 1:
+                    if (c != `'`) {
+                        str += c;
                         break;
-                }
+                    }
+                    if (str && !isNaN(str)) str = parseInt(str);
+                    //j[kv[0]][key] = str;
+                    // there are multiple keys with diffrent values (e.g permissions), make into array
+                    if (Array.isArray(j[kv[0]])) {
+                        let pos = j[kv[0]].length;
+                        if (!j[kv[0]][pos])
+                            j[kv[0]][pos] = {};
+                        j[kv[0]][pos][key] = str;
+                    } else {
+                        if (!j[kv[0]])
+                            j[kv[0]] = {};
+                        j[kv[0]][key] = str;
+                    }
+                    str = ``;
+                    key = ``;
+                    s = 0;
+                    break;
             }
         }
     });
@@ -135,6 +159,7 @@ function readManifestApk(apk) {
     //console.log(raw);
     //console.log(`=================`);
     //console.log(j);
+    //process.exit(0);
     if (j.testOnly) throw new Error(`Not publishing testOnly/debuggable version.`);
     if (!j.package) throw new Error(`Invalid apk badge\n`, j);
     return {
@@ -145,7 +170,7 @@ function readManifestApk(apk) {
             "minSdkVersion": j.sdkVersion,
             "targetSdkVersion": j.targetSdkVersion
         },
-        //"uses-permission": j.usespermission,
+        "usesPermission": j.usespermission,
         // not needed for f-droid but for me :)
         "name": j.applicationlabel, // I didn not miss the .
         //"description": j,
@@ -174,7 +199,7 @@ module.exports.package = class {
         "changelog": "", // link
         //"suggestedVersionCode": 0,
         "donate": [
-            "",
+            "", // link
         ],
         "issueTracker": "", // link
         "liberapay": "",
@@ -183,7 +208,6 @@ module.exports.package = class {
         "sourceCode": "", // link
         "translation": "", // link
         "webSite": "", // link
-        //"authorWebSite": "",
         "added": 0,
         "featureGraphic": {
             "en-US": { file: "./file.png", url: "file.png" }
@@ -222,7 +246,7 @@ module.exports.package = class {
      * @param {Array} releaseChannels array of some channels? This can be left empty e.g ["Beta"]
      */
     async addVersion(file, fileURL,/* beta = false,*/ signer = [], src = { file: ``, url: `` }, antiFeatures = {}, whatsNew = {}, releaseChannels = []) {
-        let m = readManifestApk(file);
+        let m = readApkManifest(file);
         //console.log(m);
         if (!m) throw new Error(`failed to read manifest`);
         if (!m.signer && signer.length)

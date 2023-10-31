@@ -148,12 +148,15 @@ const config = {
 
 script to check variables in fdroid repo (since there is no documentation for them)
 ```sh
-curl -o i.json https://f-droid.org/repo/index-v2.json # fdroid.org redirects to f-droid
+# fdroid.org redirects to f-droid
+curl -o i.json https://f-droid.org/repo/index-v2.json
 ```
 ```js
-require(`fs`).writeFileSync(`./ver.json`,JSON.stringify(require(`./i.json`).packages[`org.fdroid.basic`].versions,null,4))
-require(`fs`).writeFileSync(`./meta.json`,JSON.stringify(require(`./i.json`).packages[`org.fdroid.basic`].metadata,null,4))
-require(`fs`).writeFileSync(`./repo.json`,JSON.stringify(require(`./i.json`).repo,null,4))
+const fsw = require(`fs`).writeFileSync;
+const i = require(`./i.json`);
+fsw(`./vers.json`, JSON.stringify(i.packages[`org.fdroid.basic`].versions, null, 4))
+fsw(`./meta.json`, JSON.stringify(i.packages[`org.fdroid.basic`].metadata, null, 4))
+fsw(`./repo.json`, JSON.stringify(i.repo, null, 4))
 ```
 
 ## updating build tools
