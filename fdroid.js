@@ -208,10 +208,17 @@ module.exports.package = class {
         "sourceCode": "", // link
         "translation": "", // link
         "webSite": "", // link
+        "authorWebSite": "", // isn't this the same as webSite?
+        "authorEmail": "",
+        "authorName": "",
         "added": 0,
         "featureGraphic": {
             "en-US": { file: "./file.png", url: "file.png" }
         },
+        // no idea where this is used
+        //"promoGraphic": {
+        //    "en-US": { file: "./file.png", url: "file.png" }
+        //},
         "screenshots": {
             "en-US": {
                 "phone": [ // there are no other
