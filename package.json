@@ -1,6 +1,6 @@
 {
   "name": "fdroid-repo",
-  "version": "1.0.1-1",
+  "version": "1.0.2",
   "description": "Unofficial package to setup an fdroid repository quite quickly",
   "main": "fdroid.js",
   "scripts": {
