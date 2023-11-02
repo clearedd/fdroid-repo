@@ -242,18 +242,26 @@ module.exports.package = class {
             "en-US": "Comment why"
         }
     },*/
+    // releaseChannels is also
+    //"Beta": {
+    //    "description": {
+    //        "en-US": "Beta versions"
+    //    },
+    //    "name": {
+    //        "en-US": "Beta"
+    //    }
+    //}
     /**
      * 
-     * @param {String} file 
-     * @param {String} fileURL
-     * @param {Array} signer sha256 signers
-     * @param {String} src 
+     * @param {Object} file 
+     * @param {Array} signer sha256 of signers
+     * @param {Object} src source code tar for the build
      * @param {Object} antiFeatures https://f-droid.org/en/docs/Build_Metadata_Reference/#build_antifeatures
      * @param {Object} whatsNew changelog for that version, localized e.g {"en-US":"localizastion upadte! Yipee!"}
      * @param {Array} releaseChannels array of some channels? This can be left empty e.g ["Beta"]
      */
-    async addVersion(file, fileURL,/* beta = false,*/ signer = [], src = { file: ``, url: `` }, antiFeatures = {}, whatsNew = {}, releaseChannels = []) {
-        let m = readApkManifest(file);
+    async addVersion(apk = { file: ``, url: `` }, signer = [], src = { file: ``, url: `` }, antiFeatures = {}, whatsNew = {}, releaseChannels = []) {
+        let m = readApkManifest(apk.file);
         //console.log(m);
         if (!m) throw new Error(`failed to read manifest`);
         if (!m.signer && signer.length)
@@ -261,14 +269,13 @@ module.exports.package = class {
                 "sha256": signer
             };
         this.versions.push({
-            "added": fs.statSync(file).mtime.getTime(),
-            "file": await fileForFdroid(file, fileURL),
+            "added": fs.statSync(apk.file).mtime.getTime(),
+            "file": await fileForFdroid(apk.file, apk.url),
             "manifest": m,
             "antiFeatures": antiFeatures,
             "src": src.file && src.url ? await fileForFdroid(src.file, src.url) : undefined,
             "whatsNew": whatsNew,
             "releaseChannels": releaseChannels,
-            //"beta": beta
         });
     }
     out() {
